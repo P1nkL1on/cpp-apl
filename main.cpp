@@ -45,6 +45,8 @@ struct context
     virtual const value &input_take_by_addr(data::addr) const = 0;
     virtual void output_stack_push(value) = 0;
     virtual void output_write_by_addr(data::addr, value) = 0;
+    virtual int stack_size() const = 0;
+    virtual const value &input_stack_lookup(int offset = 0) const & = 0;
     virtual data::addr next_unused_addr() = 0;
     virtual std::ostream &os() { return std::cout; }
     virtual std::istream &is() { return std::cin; }
@@ -61,10 +63,13 @@ struct context_impl : context
     void output_stack_push(value v) override;
     void output_write_by_addr(data::addr a, value v) override;
     data::addr next_unused_addr() override;
+    int stack_size() const override;
+    const value &input_stack_lookup(int offset = 0) const & override;
 };
 
 void ident(context &ctx);
 void print(context &ctx);
+void print_stack(context &ctx);
 void increment(context &ctx);
 void repeat_op_x_times(context &ctx);
 void summ_two_ints(context &ctx);
@@ -82,11 +87,11 @@ int main(int, char **)
     c.output_stack_push(value::value_op(&generate_index_array));
     c.output_stack_push(value::value_op(&print));
     c.output_stack_push(value::value_op(&break_array));
-    c.output_stack_push(value::value_op(&print));
     c.output_stack_push(value::value_op(&summ_two_ints));
     c.output_stack_push(value::value_int(9));
     c.output_stack_push(value::value_op(&repeat_op_x_times));
     c.output_stack_push(value::value_op(&print));
+    c.output_stack_push(value::value_op(&print_stack));
     c.input_stack_pop();
 
     std::cout << "\nBranch summ:\n";
@@ -100,10 +105,11 @@ int main(int, char **)
     c.output_stack_push(value::value_op(&print));
     c.input_stack_pop();
 
-    // get_user_int(c);
-    // print(c);
-    // get_user_string(c);
-    // print(c);
+    std::cout << "\nEnter int, then string:\n";
+    get_user_int(c);
+    print(c);
+    get_user_string(c);
+    print(c);
     return 0;
 }
 
@@ -128,7 +134,28 @@ void print_(context &ctx, const value &v)
         ctx.os() << '\'' << v.d.i << '\'';
         break;
     case OP:
-        ctx.os() << "OP(" << v.d.op << ')';
+        if (v.d.op == &ident)
+            ctx.os() << "ident(any->any)";
+        else if (v.d.op == &print)
+            ctx.os() << "print(any->any)";
+        else if (v.d.op == &print_stack)
+            ctx.os() << "print_stack(any->any)";
+        else if (v.d.op == &increment)
+            ctx.os() << "increment(number->number)";
+        else if (v.d.op == &repeat_op_x_times)
+            ctx.os() << "repeat_op_x_times(number->op->op)";
+        else if (v.d.op == &summ_two_ints)
+            ctx.os() << "summ_two_ints(number->number->number)";
+        else if (v.d.op == &generate_index_array)
+            ctx.os() << "generate_index_array(number->array)";
+        else if (v.d.op == &break_array)
+            ctx.os() << "break_array(array->number...)";
+        else if (v.d.op == &get_user_int)
+            ctx.os() << "get_user_int(number)";
+        else if (v.d.op == &get_user_string)
+            ctx.os() << "get_user_string(array)";
+        else
+            ctx.os() << "OP(" << v.d.op << ')';
         break;
     case VECTOR: {
         const bool is_str = std::all_of(v.d.v.begin(), v.d.v.end(), [&ctx](const int i) {
@@ -163,6 +190,17 @@ void print(context &ctx)
     ctx.os() << '\n';
     ctx.output_stack_push(std::move(v));
 }
+
+void print_stack(context &ctx)
+{
+    ctx.os() << '[';
+    for (int i = 0; i < ctx.stack_size(); i++) {
+        if (i) ctx.os() << ' ';
+        print_(ctx, ctx.input_stack_lookup(i));
+    }
+    ctx.os() << ']' << '\n';
+}
+
 void assert_numeric_value(const value &v) // TODO: remove it!
 {
     if (v.t != INT && v.t != CHAR && v.t != OP) // since it's not statically typed, op output is OK
@@ -261,4 +299,16 @@ data::addr context_impl::next_unused_addr()
     const data::addr a = pile.size();
     pile.emplace_back();
     return a;
+}
+
+int context_impl::stack_size() const
+{
+    return static_cast<int>(stack.size());
+}
+
+const value &context_impl::input_stack_lookup(const int offset) const &
+{
+    if (offset < 0 || offset >= stack_size())
+        return invalid_;
+    return stack.at(offset);
 }
