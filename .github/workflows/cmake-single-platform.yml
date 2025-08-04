@@ -17,5 +17,5 @@ jobs:
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
     - name: Test
       working-directory: ${{github.workspace}}/build
-      run: ./main
+      run: ./apl_source
 
